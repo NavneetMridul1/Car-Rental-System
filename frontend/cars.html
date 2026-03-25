@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Available Cars</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="./css/styles.css?v=4" />
+  </head>
+  <body>
+    <div class="app-container">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="brand-title h3 m-0">Available Cars</h1>
+        <div class="d-flex gap-2">
+          <a class="btn btn-outline-secondary" href="./login.html" id="loginBtn">Login</a>
+          <a class="btn btn-outline-primary" href="./register.html" id="registerBtn">Register</a>
+          <a class="btn btn-outline-dark d-none" href="./agency-dashboard.html" id="agencyBtn">Agency Dashboard</a>
+          <button class="btn btn-danger d-none" id="logoutBtn" type="button">Logout</button>
+        </div>
+      </div>
+
+      <p id="globalMessage" class="info-msg"></p>
+      <div id="carList" class="car-grid"></div>
+
+      <div id="myBookingsSection" class="card card-soft p-4 mt-4 d-none">
+        <h2 class="h5 mb-3">My Bookings</h2>
+        <div class="table-responsive">
+          <table class="table table-striped align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Booking ID</th>
+                <th>Vehicle</th>
+                <th>Number</th>
+                <th>Start Date</th>
+                <th>Days</th>
+                <th>Total Cost</th>
+                <th>Agency</th>
+              </tr>
+            </thead>
+            <tbody id="myBookingsRows"></tbody>
+          </table>
+        </div>
+        <p id="myBookingsMessage" class="mt-3 mb-0 text-muted"></p>
+      </div>
+    </div>
+
+    <script src="./js/api.js?v=2"></script>
+    <script src="./js/auth.js?v=2"></script>
+    <script>
+      const role = getCurrentRole();
+      const message = document.getElementById("globalMessage");
+      const carList = document.getElementById("carList");
+      const myBookingsSection = document.getElementById("myBookingsSection");
+      const myBookingsRows = document.getElementById("myBookingsRows");
+      const myBookingsMessage = document.getElementById("myBookingsMessage");
+
+      if (role) {
+        document.getElementById("loginBtn").classList.add("d-none");
+        document.getElementById("registerBtn").classList.add("d-none");
+        document.getElementById("logoutBtn").classList.remove("d-none");
+      }
+      if (role === "AGENCY") {
+        document.getElementById("agencyBtn").classList.remove("d-none");
+        message.className = "text-danger";
+        message.textContent = "Agencies cannot rent cars.";
+      }
+
+      document.getElementById("logoutBtn").addEventListener("click", () => {
+        logout();
+      });
+
+      async function loadMyBookings() {
+        if (role !== "CUSTOMER") return;
+
+        myBookingsSection.classList.remove("d-none");
+        myBookingsRows.innerHTML = "";
+        myBookingsMessage.className = "mt-3 mb-0 text-muted";
+        myBookingsMessage.textContent = "";
+
+        try {
+          const bookings = await apiFetch("/bookings/my", {
+            method: "GET",
+            headers: getAuthHeaders()
+          });
+
+          if (!bookings.length) {
+            myBookingsMessage.textContent = "You have not booked any vehicles yet.";
+            return;
+          }
+
+          bookings.forEach((b) => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+              <td>${b.booking_id}</td>
+              <td>${b.vehicle_model}</td>
+              <td>${b.vehicle_number}</td>
+              <td>${String(b.start_date).slice(0, 10)}</td>
+              <td>${b.number_of_days}</td>
+              <td>${Number(b.total_cost).toFixed(2)}</td>
+              <td>${b.agency_name}</td>
+            `;
+            myBookingsRows.appendChild(row);
+          });
+        } catch (error) {
+          myBookingsMessage.className = "mt-3 mb-0 text-danger";
+          myBookingsMessage.textContent = error.message;
+        }
+      }
+
+      function renderCar(car) {
+        const card = document.createElement("div");
+        card.className = "card card-soft car-card";
+        const imageUrl = car.car_image_url || "https://cdn-icons-png.flaticon.com/512/744/744465.png";
+        card.innerHTML = `
+          <div class="car-image-wrap">
+            <img
+              src="${imageUrl}"
+              alt="${car.vehicle_model}"
+              class="car-image"
+            />
+          </div>
+          <div class="car-card-body">
+            <h2 class="h5">${car.vehicle_model}</h2>
+            <p class="mb-1"><strong>Number:</strong> ${car.vehicle_number}</p>
+            <p class="mb-1"><strong>Seats:</strong> ${car.seating_capacity}</p>
+            <p class="mb-2"><strong>Rent/day:</strong> ${Number(car.rent_per_day).toFixed(2)}</p>
+            <p class="mb-3 text-muted"><small>Agency: ${car.agency_name}</small></p>
+            <div class="booking-ui"></div>
+          </div>
+        `;
+
+        const bookingDiv = card.querySelector(".booking-ui");
+        if (role === "CUSTOMER") {
+          bookingDiv.innerHTML = `
+            <div class="row g-2">
+              <div class="col-md-4">
+                <input type="date" class="form-control start-date" />
+              </div>
+              <div class="col-md-4">
+                <input type="number" min="1" class="form-control num-days" placeholder="Days" />
+              </div>
+              <div class="col-md-4">
+                <button class="btn btn-primary w-100 rent-btn">Rent Car</button>
+              </div>
+            </div>
+            <p class="mt-2 mb-0 small text-muted feedback"></p>
+          `;
+
+          bookingDiv.querySelector(".rent-btn").addEventListener("click", async () => {
+            const startDate = bookingDiv.querySelector(".start-date").value;
+            const numberOfDays = bookingDiv.querySelector(".num-days").value;
+            const feedback = bookingDiv.querySelector(".feedback");
+
+            try {
+              const result = await apiFetch("/bookings", {
+                method: "POST",
+                headers: getAuthHeaders(),
+                body: JSON.stringify({
+                  car_id: car.id,
+                  start_date: startDate,
+                  number_of_days: Number(numberOfDays)
+                })
+              });
+              feedback.className = "mt-2 mb-0 small text-success";
+              feedback.textContent = `${result.message} Total cost: ${result.totalCost}`;
+              loadMyBookings();
+            } catch (error) {
+              feedback.className = "mt-2 mb-0 small text-danger";
+              feedback.textContent = error.message;
+            }
+          });
+        } else if (role === "AGENCY") {
+          bookingDiv.innerHTML = "";
+        } else {
+          bookingDiv.innerHTML = `<a class="btn btn-outline-primary" href="./login.html">Login to rent</a>`;
+        }
+
+        return card;
+      }
+
+      async function loadCars() {
+        try {
+          const cars = await apiFetch("/cars");
+          if (!cars.length) {
+            message.textContent = "No cars available yet.";
+            return;
+          }
+          cars.forEach((car) => carList.appendChild(renderCar(car)));
+        } catch (error) {
+          message.className = "text-danger";
+          message.textContent = error.message;
+        }
+      }
+
+      if (!role) {
+        message.textContent = "Public listing enabled. Login as customer to rent cars.";
+      }
+      loadCars();
+      loadMyBookings();
+    </script>
+  </body>
+</html>
