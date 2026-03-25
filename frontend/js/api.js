@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://localhost:5000/api";
+const API_BASE_URL = "https://car-rental-system-production-011a.up.railway.app";
 
 function getToken() {
   return localStorage.getItem("token");
