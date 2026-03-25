@@ -13,6 +13,31 @@ const port = Number(process.env.PORT || 5000);
 app.use(cors());
 app.use(express.json());
 
+app.get("/", (req, res) => {
+  res.json({
+    message: "Car Rental System API is running.",
+    docs: "/api",
+    health: "/api/health"
+  });
+});
+
+app.get("/api", (req, res) => {
+  res.json({
+    message: "Car Rental System API root",
+    endpoints: [
+      "GET /api/health",
+      "POST /api/auth/register",
+      "POST /api/auth/login",
+      "GET /api/cars",
+      "POST /api/cars",
+      "PUT /api/cars/:id",
+      "POST /api/bookings",
+      "GET /api/bookings/my",
+      "GET /api/agency/bookings"
+    ]
+  });
+});
+
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
